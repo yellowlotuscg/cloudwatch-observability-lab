@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Tests and Terraform
+    runs-on: ubuntu-latest
+    env:
+      # Do not consult the instance metadata service. This job has no AWS account.
+      AWS_EC2_METADATA_DISABLED: "true"
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Stop if AWS credentials are present
+        run: |
+          if [ -n "${AWS_ACCESS_KEY_ID:-}${AWS_SECRET_ACCESS_KEY:-}${AWS_SESSION_TOKEN:-}${AWS_PROFILE:-}" ]; then
+            echo "Refusing to run: this workflow does not use AWS credentials."
+            exit 1
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install sample app dependencies
+        run: python -m pip install -r sample-app/requirements.txt
+
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.16.5"
+          terraform_wrapper: false
+
+      - name: Check formatting
+        run: terraform fmt -check
+
+      - name: Initialize without a backend
+        run: terraform init -backend=false -input=false
+
+      - name: Validate configuration
+        run: terraform validate
